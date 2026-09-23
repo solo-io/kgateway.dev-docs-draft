@@ -428,7 +428,7 @@ Set `clockSkew` only as wide as the clock drift you actually observe, because a 
 
 ### JWT validation modes {#jwt-validation}
 
-The `validationMode` field in `spec.jwt` controls whether requests without a JWT are allowed. To change the mode, reapply the GatewayExtension that you created earlier with the updated `validationMode` value.
+The `validationMode` field in `spec.jwt` controls whether requests without a JWT, or with an invalid JWT, are allowed. To change the mode, reapply the GatewayExtension that you created earlier with the updated `validationMode` value.
 
 **Strict** (default): Requests without a valid JWT are rejected with a `401 Unauthorized` response.
 
@@ -514,6 +514,119 @@ Example output:
 ```
 < HTTP/1.1 200 OK
 ```
+
+{{< version exclude-if="2.4.x,2.3.x,2.2.x,2.1.x" >}}
+
+**AllowMissingOrFailed**: Requests without a token and requests with an invalid token are allowed through. Use `AllowMissingOrFailed` to evaluate a JWT policy against live traffic before you enforce it with `Strict`. This mode provides no authentication by itself. RBAC rules that match JWT claims see the same empty payload metadata for an invalid token as for a request with no token.
+
+Each verification failure appears in the `envoy.filters.http.jwt_authn:failed_status` dynamic metadata. You can use the `%DYNAMIC_METADATA(envoy.filters.http.jwt_authn:failed_status)%` access log formatter to inspect what `Strict` mode would have rejected.
+
+```yaml
+kubectl apply -f- <<EOF
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: GatewayExtension
+metadata:
+  name: selfminted-jwt
+  namespace: {{< reuse "kgw-docs/snippets/namespace.md" >}}
+spec:
+  jwt:
+    validationMode: AllowMissingOrFailed
+    providers:
+      - name: selfminted
+        issuer: kgateway.dev
+        claimsToHeaders:
+          - name: team
+            header: x-team
+        jwks:
+          local:
+            inline: '{"keys":[{"kty":"RSA","kid":"kgateway-public-key-001","use":"sig","alg":"RS256","n":"tNxnW0ZghyIUdfRc97EuZ6Hii0z4AucJrbOCT8MxKznlnV9Z-OrOYMf_hyjiD2Q_qyGrv-sRhinKOjokr-cbLKhHlAlEkEW1ah4wQ-zzO3DT0SdAKX_7RkMkl5Sba443vfDlDmuVSBeyHQr6cKZZGBIe8TlzcKR0xYlop13p1DYAHsIiX8A_q2CmsRlnV4CbneNMGZOmHuBiFG3DJ2lc1ZgvKc8SN1gt3oEujRqxy4yPLHVJ3wQ58ezYtgV2gzbyllzJdi1DSoPtnCFFGvfDqmAcDdmfVtHUHqagCF0ivEQsrxt7PYKqxuCbkaSY1_ef7ub01_5KF1GhlA9y5XSqJQ","e":"AQAB"}]}'
+EOF
+```
+
+| Field | Description |
+| ----- | ----------- |
+| `validationMode` | Set to `AllowMissingOrFailed` to verify tokens when they are present, but never reject a request because the token is missing, expired, malformed, or otherwise invalid. |
+| `claimsToHeaders` | Forwards claims only from verified JWTs. Requests without a token, and requests with an invalid token, reach the backend without these claim headers. |
+
+Send a request without a token to verify that you get a `200 OK` response.
+
+{{< tabs >}}
+{{% tab name="Cloud Provider LoadBalancer" %}}
+```sh
+curl -vik http://$INGRESS_GW_ADDRESS:8080/headers -H "host: www.example.com:8080"
+```
+{{% /tab %}}
+{{% tab name="Port-forward for local testing" %}}
+```sh
+curl -vik localhost:8080/headers -H "host: www.example.com:8080"
+```
+{{% /tab %}}
+{{< /tabs >}}
+
+Example output:
+
+```text
+< HTTP/1.1 200 OK
+```
+
+Send a request with an invalid token to verify that you get a `200 OK` response and no claim headers.
+
+{{< tabs >}}
+{{% tab name="Cloud Provider LoadBalancer" %}}
+```sh
+curl -vik http://$INGRESS_GW_ADDRESS:8080/headers \
+  -H "host: www.example.com:8080" \
+  --header "Authorization: Bearer invalid-token"
+```
+{{% /tab %}}
+{{% tab name="Port-forward for local testing" %}}
+```sh
+curl -vik localhost:8080/headers \
+  -H "host: www.example.com:8080" \
+  --header "Authorization: Bearer invalid-token"
+```
+{{% /tab %}}
+{{< /tabs >}}
+
+Example output:
+
+```text
+< HTTP/1.1 200 OK
+```
+
+Send a request with the valid token that you saved earlier. Verify that the response includes the `X-Team` header from the verified JWT.
+
+{{< tabs >}}
+{{% tab name="Cloud Provider LoadBalancer" %}}
+```sh
+curl -vik http://$INGRESS_GW_ADDRESS:8080/headers \
+  -H "host: www.example.com:8080" \
+  --header "Authorization: Bearer $TOKEN"
+```
+{{% /tab %}}
+{{% tab name="Port-forward for local testing" %}}
+```sh
+curl -vik localhost:8080/headers \
+  -H "host: www.example.com:8080" \
+  --header "Authorization: Bearer $TOKEN"
+```
+{{% /tab %}}
+{{< /tabs >}}
+
+Example output:
+
+```json
+{
+  "headers": {
+    ...
+    "X-Team": [
+      "dev"
+    ]
+  }
+}
+```
+
+{{< /version >}}
 
 ### Configure audiences {#audiences}
 
