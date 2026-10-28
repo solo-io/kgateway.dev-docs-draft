@@ -74,6 +74,10 @@ If you build on kgateway as a Go library, the following functions are also remov
 
 The control plane no longer emits the `kgateway_translator_translations_running` and `kgateway_controller_reconciliations_running` gauges. The `kgateway_translator_translations_total` and `kgateway_translator_translation_duration_seconds` metrics no longer include the `translator="TranslateHTTPRoute"` series, so update Prometheus alerts, dashboards, and queries that use those series.
 
+#### kgateway as an Istio ambient waypoint is removed {#v25-kgateway-as-an-istio-ambient-waypoint-is-removed}
+
+Support for running kgateway with the `kgateway-waypoint` GatewayClass is removed. Before upgrading, move existing kgateway waypoint Gateways to Istio waypoints. Sending ingress traffic through Istio waypoints remains available with `waypoint.enabled` or `KGW_INGRESS_USE_WAYPOINTS=true`. For more information, see [Migrate from kgateway waypoints]({{< link-hextra path="/integrations/istio/ambient/additional-settings/#migrate-from-kgateway-waypoints" >}}).
+
 ### 🌟 New features {#v25-new-features}
 
 #### Control the Host header of mirrored requests {#v25-request-mirror-host}
